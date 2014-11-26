@@ -11,8 +11,8 @@ ifndef PLATFORM
 # PLATFORM=-DTILERA
 # PLATFORM=-DXEON
 # PLATFORM=-DOPTERON
-# PLATFORM=-DDEFAULT
-PLATFORM=-DXEON2
+PLATFORM=-DDEFAULT
+#PLATFORM=-DXEON2
 endif
 
 UNAME := $(shell uname)
@@ -30,6 +30,16 @@ ifeq ($(UNAME), SunOS)
 	GCC:=/opt/csw/bin/gcc
 	LIBS := -lrt -lpthread
 	COMPILE_FLAGS+= -m64 -mcpu=v9 -mtune=v9
+endif
+
+ifeq ($(PLATFORM),-DDEFAULT)
+CORE_NUM ?= $(shell nproc)
+CORE_SPEED_KHz := $(shell cat /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq)
+FREQ_GHZ := $(shell echo "scale=3; ${CORE_SPEED_KHz}/1000000" | bc -l)
+$(info ********************************** Using as a default number of cores: $(CORE_NUM) on 1 socket)
+$(info ********************************** Using as a default frequency      : $(FREQ_GHZ) GHz)
+COMPILE_FLAGS += -DCORE_NUM=${CORE_NUM} 
+COMPILE_FLAGS += -DFREQ_GHZ=${FREQ_GHZ}
 endif
 
 COMPILE_FLAGS += $(PLATFORM)
