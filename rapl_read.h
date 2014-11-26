@@ -66,7 +66,7 @@ extern "C" {
    core actually does measurements. */
 #define RR_STOP()				
 /* start some measurements (i.e., package, pp0, and dram). Only the responsible 
-   (for each socket) core actually does  measurements. */
+   (for each socket) core actually does measurements. */
 #define RR_START_SIMPLE()			
 /* stop some measurements (i.e., package, pp0, and dram) and update the statistics. 
    Only the responsible  (for each socket) core actually does  measurements. */
