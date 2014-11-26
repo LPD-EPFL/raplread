@@ -18,6 +18,8 @@ extern "C" {
 
 #include "platform_defs.h"
 
+#define RAPL_READ_ENABLE 1
+
 /*********************************************************************************/
 /* interface */
 /*********************************************************************************/
@@ -25,6 +27,8 @@ extern "C" {
 
 /* initialize the library */
 #define RR_INIT(core)
+/* initialize the library for all sockets. Called, for example, from a main thread. */
+#define RR_INIT_ALL()
 /* start ALL measurements. Only the responsible (for each socket) core actually does
    measurements. */
 #define RR_START()			
@@ -39,11 +43,18 @@ extern "C" {
 #define RR_STOP_SIMPLE()			
 /* start some measurements (i.e., package, pp0, and dram), w/o checking if the core
    is the responsible for taking the measurements. To be used, for instance, when
-   a main thread takes the measurements for a sockets. */
+   a main thread takes the measurements for a socket. */
 #define RR_START_UNPROTECTED()			
 /* stop some measurements (i.e., package, pp0, and dram) and update the statistics,
    w/o checking if the core is the responsible for taking the measurements. */
 #define RR_STOP_UNPROTECTED()			
+/* start some measurements (i.e., package, pp0, and dram), w/o checking if the core
+   is the responsible for taking the measurements. Takes measurements for all 
+   sockets, not only the one where the threads runs. */
+#define RR_START_UNPROTECTED_ALL()			
+/* stop some measurements (i.e., package, pp0, and dram) and update the statistics,
+   w/o checking if the core is the responsible for taking the measurements. */
+#define RR_STOP_UNPROTECTED_ALL()			
 /* print the current statistics with `detailed` level of details (only the responsible
    core for printing)*/
 #define RR_PRINT(detailed)			
@@ -58,6 +69,12 @@ extern "C" {
 
 #define RR_INIT(core)				\
   if (rapl_read_init(core) < 0)			\
+    {						\
+      printf("[RAPL] Could not initialize\n");	\
+    }						
+
+#define RR_INIT_ALL()				\
+  if (rapl_read_init_all() < 0)			\
     {						\
       printf("[RAPL] Could not initialize\n");	\
     }						
@@ -80,6 +97,11 @@ extern "C" {
 #define RR_STOP_UNPROTECTED()			\
   rapl_read_stop_pack_pp0_unprotected();
 
+#define RR_START_UNPROTECTED_ALL()		\
+  rapl_read_start_pack_pp0_unprotected_all();
+
+#define RR_STOP_UNPROTECTED_ALL()		\
+  rapl_read_stop_pack_pp0_unprotected_all();
 
 #define RR_PRINT(detailed)			\
   rapl_read_print_all_sockets(detailed, 1)
@@ -152,12 +174,15 @@ long long int read_msr(int fd, int which);
 int detect_cpu(void);
 
 int rapl_read_init(int core);
+int rapl_read_init_all();
 void rapl_read_start();
 void rapl_read_stop();
 void rapl_read_start_pack_pp0();
 void rapl_read_stop_pack_pp0();
 void rapl_read_start_pack_pp0_unprotected();
 void rapl_read_stop_pack_pp0_unprotected();
+void rapl_read_start_pack_pp0_unprotected_all();
+void rapl_read_stop_pack_pp0_unprotected_all();
 void rapl_read_term();
 void rapl_read_print(int detailed);
 void rapl_read_print_all_sockets(int detailed, int protected);

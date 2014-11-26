@@ -22,6 +22,10 @@ int rapl_pp0_policy, rapl_pp1_policy;
 
 uint64_t rapl_start_ts[NUMBER_OF_SOCKETS], rapl_stop_ts[NUMBER_OF_SOCKETS];
 
+#define FOR_ALL_SOCKETS(s)			\
+  for (s = 0; s < NUMBER_OF_SOCKETS; s++)
+
+
 int
 open_msr(int core) 
 {
@@ -121,19 +125,19 @@ detect_cpu(void)
   switch(model) 
     {
     case CPU_SANDYBRIDGE:
-      printf("[RAPL] Found Sandybridge CPU\n");
+      // printf("[RAPL] Found Sandybridge CPU\n");
       break;
     case CPU_SANDYBRIDGE_EP:
-      printf("[RAPL] Found Sandybridge-EP CPU\n");
+      // printf("[RAPL] Found Sandybridge-EP CPU\n");
       break;
     case CPU_IVYBRIDGE:
-      printf("[RAPL] Found Ivybridge CPU\n");
+      // printf("[RAPL] Found Ivybridge CPU\n");
       break;
     case CPU_IVYBRIDGE_EP:
-      printf("[RAPL] Found Ivybridge-EP CPU\n");
+      // printf("[RAPL] Found Ivybridge-EP CPU\n");
       break;
     case CPU_HASWELL:
-      printf("[RAPL] Found Haswell CPU\n");
+      // printf("[RAPL] Found Haswell CPU\n");
       break;
     default:	
       printf("[RAPL] Unsupported model %d\n", model);
@@ -184,6 +188,12 @@ rapl_read_init(int core)
 {
   rapl_core = core; 
   rapl_socket = get_cluster(core);
+
+  if (rapl_core >= (NUMBER_OF_SOCKETS * CORES_PER_SOCKET))
+    {
+      return 2;
+    }
+  
   /* try to be the "guy" for this socket */
   if (__sync_bool_compare_and_swap(rapl_resp_core + rapl_socket, 0, rapl_get_core_with_offs()) == 0)
     {
@@ -243,6 +253,73 @@ rapl_read_init(int core)
   rapl_pkg_power_limit_2 = rapl_power_units * (double)((result>>32)&0x7FFF);
   rapl_pkg_time_window_2 = rapl_time_units * (double)((result>>49)&0x007F);
 
+  return 1;
+}
+
+int
+rapl_read_init_all()
+{
+  __sync_fetch_and_add(&rapl_num_active_sockets, NUMBER_OF_SOCKETS);
+
+  rapl_cpu_model = detect_cpu();
+  if (rapl_cpu_model < 0)
+    {
+      printf("[RAPL] Unsupported processor\n");
+      return -1;
+    }
+
+  if (!((rapl_cpu_model == CPU_SANDYBRIDGE) || (rapl_cpu_model == CPU_IVYBRIDGE) || (rapl_cpu_model == CPU_HASWELL)))
+    {
+      rapl_dram_counter = 1;
+    }
+
+
+  int s;
+  FOR_ALL_SOCKETS(s)
+  {
+    int core;
+    for (core = 0; core < NUMBER_OF_SOCKETS * CORES_PER_SOCKET; core++)
+      {
+	if (s == get_cluster(core))
+	  {
+	    rapl_msr_fd[s] = open_msr(core);
+	    break;
+	  }
+      }
+
+    if (rapl_msr_fd[s] < 0)
+      {
+	printf("[RAPL] Cannot read MSR\n");
+	return -1;
+      }
+
+    rapl_initialized[s] = 1;
+  }
+ 
+  s = 0;
+  /* Calculate the units used */
+  long long int result = read_msr(rapl_msr_fd[s], MSR_RAPL_POWER_UNIT);
+  rapl_power_units = pow(0.5, (double)(result&0xf));
+  rapl_energy_units = pow(0.5, (double)((result>>8)&0x1f));
+  rapl_time_units = pow(0.5, (double)((result>>16)&0xf));
+
+
+  /* Show package power info */
+  result = read_msr(rapl_msr_fd[s], MSR_PKG_POWER_INFO);
+  rapl_thermal_spec_power = rapl_power_units * (double)(result&0x7fff);
+  rapl_minimum_power = rapl_power_units * (double)((result>>16)&0x7fff);
+  rapl_maximum_power = rapl_power_units * (double)((result>>32)&0x7fff);
+  rapl_time_window = rapl_time_units * (double)((result>>48)&0x7fff);
+
+
+  /* Show package power limit */
+  result = read_msr(rapl_msr_fd[s], MSR_PKG_RAPL_POWER_LIMIT);
+  rapl_msr_pkg_settings = result;
+  rapl_pkg_power_limit_1 = rapl_power_units * (double)((result>>0)&0x7FFF);
+  rapl_pkg_time_window_1 = rapl_time_units * (double)((result>>17)&0x007F);
+  rapl_pkg_power_limit_2 = rapl_power_units * (double)((result>>32)&0x7FFF);
+  rapl_pkg_time_window_2 = rapl_time_units * (double)((result>>49)&0x007F);
+  
   return 1;
 }
 
@@ -418,6 +495,70 @@ rapl_read_stop_pack_pp0_unprotected()
     }
 }
 
+
+void
+rapl_read_start_pack_pp0_unprotected_all()
+{
+  rapl_start_ts[0] = rapl_read_getticks();
+  int i;
+  for (i = 1; i < NUMBER_OF_SOCKETS; i++)
+    {
+      rapl_start_ts[i] = rapl_start_ts[0];
+    }
+
+  FOR_ALL_SOCKETS(i)
+  {
+    long long int result; 
+    if (rapl_dram_counter)
+      {
+	result = read_msr(rapl_msr_fd[i], MSR_DRAM_ENERGY_STATUS);
+	rapl_dram_before[i] = (double)result;
+      }
+    result = read_msr(rapl_msr_fd[i], MSR_PKG_ENERGY_STATUS);
+    rapl_package_before[i] = (double)result;
+    result = read_msr(rapl_msr_fd[i], MSR_PP0_ENERGY_STATUS);
+    rapl_pp0_before[i] = (double)result;
+  }
+}
+
+void
+rapl_read_stop_pack_pp0_unprotected_all()
+{
+  int i;
+  FOR_ALL_SOCKETS(i)
+  {
+    long long int result; 
+    result = read_msr(rapl_msr_fd[i], MSR_PP0_ENERGY_STATUS);
+    rapl_pp0_after[i] = (double)result;
+    result = read_msr(rapl_msr_fd[i], MSR_PKG_ENERGY_STATUS);  
+    rapl_package_after[i] = (double)result;
+    if (rapl_dram_counter)
+      {
+	result = read_msr(rapl_msr_fd[i], MSR_DRAM_ENERGY_STATUS);
+	rapl_dram_after[i] = (double)result;
+      }
+  }
+
+  rapl_stop_ts[0] = rapl_read_getticks();
+  for (i = 1; i < NUMBER_OF_SOCKETS; i++)
+    {
+      rapl_stop_ts[i] = rapl_stop_ts[0];
+    }
+
+  FOR_ALL_SOCKETS(i)
+  {
+    rapl_package_before[i] *= rapl_energy_units;
+    rapl_package_after[i] *= rapl_energy_units;
+    rapl_pp0_before[i] *= rapl_energy_units;
+    rapl_pp0_after[i] *= rapl_energy_units;
+    if(rapl_dram_counter)
+      {
+	rapl_dram_before[i] *= rapl_energy_units;
+	rapl_dram_after[i] *= rapl_energy_units;
+      }
+  }
+}
+
 void
 rapl_read_print(int detailed)
 {
@@ -543,9 +684,6 @@ rapl_read_print(int detailed)
     }
 }
 
-
-#define FOR_ALL_SOCKETS(s)			\
-  for (s = 0; s < NUMBER_OF_SOCKETS; s++)
 
 #define FOR_ALL_SOCKETS_PRINT(pattern, var, div_sum, fin)	\
   {								\
