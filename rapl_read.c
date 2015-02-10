@@ -55,6 +55,13 @@ uint64_t rapl_start_ts[NUMBER_OF_SOCKETS], rapl_stop_ts[NUMBER_OF_SOCKETS];
 #define FOR_ALL_SOCKETS(s)			\
   for (s = 0; s < NUMBER_OF_SOCKETS; s++)
 
+#define FOR_ALL_SELECTED_SOCKETS(socket, s)	\
+  for (s = 0; s < NUMBER_OF_SOCKETS; s++)	\
+    if (socket == RR_NODE_ALL || s == socket)
+
+#define NON_SELECTED_SOCKETS			\
+  else
+
 
 int
 open_msr(int core) 
@@ -745,19 +752,25 @@ rapl_read_print(int detailed)
 void
 rapl_read_print_all_sockets(int detailed, int protected)
 {
+  rapl_read_print_sockets(RR_NODE_ALL, detailed, protected);
+}
+
+void
+rapl_read_print_sockets(int socket, int detailed, int protected)
+{
   if (protected && !rapl_allowed_once())
     {
       return;
     }
   int s;
 
-  FOR_ALL_SOCKETS(s)
-  {
-    if (rapl_initialized[s] && rapl_package_after[s] < rapl_package_before[s])
-      {
-	printf("[RAPL][%d] WARNING: the measurements might have overflown!\n", s);
-      }
-  }
+  FOR_ALL_SELECTED_SOCKETS(socket, s)
+    {
+      if (rapl_initialized[s] && rapl_package_after[s] < rapl_package_before[s])
+	{
+	  printf("[RAPL][%d] WARNING: the measurements might have overflown!\n", s);
+	}
+    }
 
   printf("[RAPL]                                     : ");
   printf("%-12s", "Total");
@@ -833,7 +846,7 @@ rapl_read_print_all_sockets(int detailed, int protected)
 	duration_s[s] = (double) duration[s] / ((CORE_SPEED_GHZ) * 1e9);
       }
 
-      if (detailed >= RAPL_PRINT_ENE)
+      if (detailed >= RAPL_PRINT_POW)
 	{
 	  printf("[RAPL] Duration                            : ");
 	  FOR_ALL_SOCKETS_PRINT("%11.6f ", duration_s, rapl_num_active_sockets, " s\n");
@@ -851,14 +864,22 @@ rapl_read_print_all_sockets(int detailed, int protected)
       double rapl_dram[NUMBER_OF_SOCKETS]; 
       double rapl_rest[NUMBER_OF_SOCKETS]; 
 
-      FOR_ALL_SOCKETS(s)
-      {
-	rapl_package[s] = rapl_package_after[s] - rapl_package_before[s];
-	rapl_pp0[s] = rapl_pp0_after[s] - rapl_pp0_before[s];
-	rapl_dram[s] = rapl_dram_after[s] - rapl_dram_before[s];
-	rapl_rest[s] = rapl_package[s] - rapl_pp0[s];
-	rapl_total[s] = rapl_package[s] + rapl_dram[s];
-      }
+      FOR_ALL_SELECTED_SOCKETS(socket, s)
+	{
+	  rapl_package[s] = rapl_package_after[s] - rapl_package_before[s];
+	  rapl_pp0[s] = rapl_pp0_after[s] - rapl_pp0_before[s];
+	  rapl_dram[s] = rapl_dram_after[s] - rapl_dram_before[s];
+	  rapl_rest[s] = rapl_package[s] - rapl_pp0[s];
+	  rapl_total[s] = rapl_package[s] + rapl_dram[s];
+	}
+      NON_SELECTED_SOCKETS
+	{
+	  rapl_package[s] = 0;
+	  rapl_pp0[s] = 0;
+	  rapl_dram[s] = 0;
+	  rapl_rest[s] = 0;
+	  rapl_total[s] = 0;
+	}
 
       if (detailed >= RAPL_PRINT_ENE)
 	{
@@ -883,14 +904,22 @@ rapl_read_print_all_sockets(int detailed, int protected)
       double rapl_dram_pow[NUMBER_OF_SOCKETS]; 
       double rapl_rest_pow[NUMBER_OF_SOCKETS]; 
 
-      FOR_ALL_SOCKETS(s)
-      {
-	rapl_package_pow[s] = rapl_package[s] / duration_s[s];
-	rapl_pp0_pow[s] = rapl_pp0[s] / duration_s[s];
-	rapl_dram_pow[s] = rapl_dram[s] / duration_s[s];		
-	rapl_rest_pow[s] = rapl_rest[s] / duration_s[s];		
-	rapl_total_pow[s] = rapl_total[s] / duration_s[s];
-      }
+      FOR_ALL_SELECTED_SOCKETS(socket, s)
+	{
+	  rapl_package_pow[s] = rapl_package[s] / duration_s[s];
+	  rapl_pp0_pow[s] = rapl_pp0[s] / duration_s[s];
+	  rapl_dram_pow[s] = rapl_dram[s] / duration_s[s];		
+	  rapl_rest_pow[s] = rapl_rest[s] / duration_s[s];		
+	  rapl_total_pow[s] = rapl_total[s] / duration_s[s];
+	}
+      NON_SELECTED_SOCKETS
+	{
+	  rapl_package_pow[s] = 0;
+	  rapl_pp0_pow[s] = 0;
+	  rapl_dram_pow[s] = 0;
+	  rapl_rest_pow[s] = 0;
+	  rapl_total_pow[s] = 0;
+	}
 
       printf("[RAPL] CONSUMED Total power                : ");
       FOR_ALL_SOCKETS_PRINT("%11.6f ", rapl_total_pow, 1, " W\n");

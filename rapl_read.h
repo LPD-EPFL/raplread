@@ -90,6 +90,9 @@ extern "C" {
 #define RR_PRINT(detailed)			
 /* print the current statistics with `detailed` level of details */
 #define RR_PRINT_UNPROTECTED(detailed)			
+/* print the current statistics with `detailed` level of details for node nd, or 
+   for all nodes if nd == RR_NODE_ALL*/
+#define RR_PRINT_UNPROTECTED_NODE(nd, detailed)			
 /* terminate the rapl_read library */
 #define RR_TERM()				
 /* generate stats and store them in s (rapl_stats_t*) */
@@ -139,6 +142,9 @@ extern "C" {
 #define RR_PRINT_UNPROTECTED(ds)		\
   rapl_read_print_all_sockets(ds, 0)
 
+#define RR_PRINT_UNPROTECTED_NODE(nd, ds)	\
+  rapl_read_print_sockets(nd, ds, 0)
+
 #define RR_TERM()				\
   rapl_read_term()
 
@@ -152,6 +158,8 @@ extern "C" {
 #define RAPL_PRINT_ENE     1L
 #define RAPL_PRINT_BEF_AFT 2L
 #define RAPL_PRINT_ALL     3L
+
+#define RR_NODE_ALL      -1
 
 #define MSR_RAPL_POWER_UNIT		0x606
 
@@ -216,6 +224,7 @@ void rapl_read_stop_pack_pp0_unprotected_all();
 void rapl_read_term();
 void rapl_read_print(int detailed);
 void rapl_read_print_all_sockets(int detailed, int protected);
+void rapl_read_print_sockets(int socket, int detailed, int protected);
 
 typedef struct rapl_stats
 {
