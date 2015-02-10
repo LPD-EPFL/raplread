@@ -10,7 +10,7 @@ raplread is an extension of http://web.eece.maine.edu/~vweaver/projects/rapl/rap
 * Related Publications: raplread was developed for:
   Asynchronized Concurrency: The Secret to Scaling Concurrent Search Data Structures,
   Tudor David, Rachid Guerraoui, Vasileios Trigonakis (alphabetical order),
-  ASPLOS '14
+  ASPLOS '15
 
 
 Installation
